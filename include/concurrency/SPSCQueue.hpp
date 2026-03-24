@@ -3,6 +3,8 @@
 #include <vector>
 #include <atomic>
 #include <optional>
+#include <utility>
+#include <new>
 
 namespace tradeforge::concurrency {
 
