@@ -114,7 +114,10 @@ class SPSCQueue {
                 return std::nullopt;
 
             // Move the data from the tail of the queue.
-            T item = std::move(buffer_[current_tail]);
+            // Perfectly matching the type of the returned item to the return type
+            // of the method enables Named Return Value Optimization. The compiler
+            // will move the item directly into the caller's stack frame.
+            std::optional<T> item{std::move(buffer_[current_tail])};
 
             // Calculate the next tail position.
             const std::size_t next_tail = (current_tail + 1) & mask_;
