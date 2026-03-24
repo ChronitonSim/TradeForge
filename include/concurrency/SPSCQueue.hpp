@@ -48,7 +48,9 @@ class SPSCQueue {
             buffer_.resize(capacity);
         }
 
-        // PRODUCER METHOD 
+        // --- PRODUCER METHODS ---
+
+        // Copy Push (for lvalues)
         // Pushes an item onto the queue. Returns false if the queue is full.
         bool push(const T& item) {
             // Read the current head. No inter-thread sync required
@@ -70,7 +72,7 @@ class SPSCQueue {
             // The queue is not full. We write data to the head of the buffer.
             // No need for inter-thread sync, as only the producer writes 
             // to this end of the queue.
-            buffer_[current_head] = item;
+            buffer_[current_head] = item;  // Copy happens here.
 
             // Publish the new head. 
             // Release semantics guarantee that the data written to 
@@ -81,7 +83,23 @@ class SPSCQueue {
             return true;
         }
 
-        // CONSUMER METHOD
+        // Move Push (for rvalues)
+        bool push(T&& item) {
+            
+            const std::size_t current_head = head_.load(std::memory_order_relaxed);
+            const std::size_t next_head = (current_head + 1) & mask_;
+
+            if (next_head == tail_.load(std::memory_order_acquire))
+                return false; 
+
+            buffer_[current_head] = std::move(item);
+            head_.store(next_head, std::memory_order_release);
+
+            return true;
+        }
+
+        // --- CONSUMER METHOD ---
+
         // Pops an item from the queue. Returns std::nullopt if the queue is empty.
         std::optional<T> pop() {
             // Read the current tail. Only the consumer modifies tail_, 
