@@ -15,6 +15,7 @@ Every commit message should be structured as follows:
 * **`test`**: Adding missing tests or benchmarks.
 * **`refactor`**: A code change that neither fixes a bug nor adds a feature (e.g., restructuring code).
 * **`chore`**: Tooling, CMake updates, dependencies, or build process changes.
+* **`docs`**: Arcitectural documentation (e.g. performance, control flow).
 
 ### 2. Scopes
 To quickly identify which part of the trading engine is being modified, use one of the following scopes:
