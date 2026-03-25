@@ -1,6 +1,5 @@
 #include <cstddef>
-#include <stdexcept>
-#include <vector>
+#include <array>
 #include <atomic>
 #include <optional>
 #include <utility>
@@ -8,9 +7,18 @@
 
 namespace tradeforge::concurrency {
 
-template<typename T>
+template<typename T, std::size_t Capacity>
 class SPSCQueue {
+    
     private:
+
+        // --- COMPILE-TIME VALIDATION ---
+        // Avoids validation overhead at construction time 
+        // and possible exceptions.
+        static_assert(Capacity >= 2, "Capacity must be at least 2." );
+        // The capacity must be a power of 2 to allow bitwise modulo optimizations
+        static_assert((Capacity & (Capacity - 1)) == 0, "Capacity must be a power of 2." );
+
         // Cache line size to prevent false sharing.
         // If the compiler does not define it, fall back to 64.
         #ifdef __cpp_lib_hardware_interference_size
@@ -19,10 +27,13 @@ class SPSCQueue {
             static constexpr std::size_t CACHE_LINE_SIZE = 64;
         #endif
 
-        // The capacity must be a power of 2 to allow bitwise modulo optimization
-        std::size_t capacity_;
-        std::size_t mask_;
-        std::vector<T> buffer_;
+        // As a compile-time constant (rather than a member variable)
+        // mask_ takes up no memory in the object footprint.
+        static constexpr std::size_t mask_ = Capacity - 1;
+
+        // Allocate buffer_ on the stack using std::array. 
+        // No heap allocations.
+        std::array<T, Capacity> buffer_;
 
         // PRODUCER'S DOMAIN
         // Ensure this variable starts on its own cache line.
@@ -35,19 +46,9 @@ class SPSCQueue {
         alignas(CACHE_LINE_SIZE) std::atomic<std::size_t> tail_{0};
 
     public:
-        // Constructor: pre-allocate the buffer to avoid later
-        // heap allocations on the hot path.
-        explicit SPSCQueue(std::size_t capacity) {
-            // Validate power of 2 using bitwise &
-            // capapcity is a power of 2 iff (capacity & (capacity - 1) == 0)
-            if (capacity < 2 || (capacity & (capacity - 1)) != 0)
-                throw std::invalid_argument("Capacity must be a power of 2.");
-            
-            capacity_ = capacity;
-            mask_ = capacity - 1;
-            buffer_.resize(capacity);
-        }
 
+        explicit SPSCQueue() = default;
+            
         // --- PRODUCER METHODS ---
 
         // Copy Push (for lvalues)
