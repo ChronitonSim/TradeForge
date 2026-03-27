@@ -33,3 +33,23 @@ When inserting an object into a `std::list`, the standard library dynamically al
 TradeForge eliminates this overhead by using an **Intrusive Linked List**. Instead of wrapping the data inside a standard library node, the routing pointers (`Order* prev` and `Order* next`) are baked directly into the `Order` struct itself.
 
 Because the `Order` object is its own list node, the Engine Thread can acquire a pre-allocated `Order` from the zero-allocation `ObjectPool`, populate its financial data, and wire its pointers directly into the LOB hierarchy. This architecture maintains the $O(1)$ cancellation speed of a linked list while bypassing the operating system's memory manager entirely.
+
+## 5. Price Normalization and Dense Array Routing
+To achieve $O(1)$ lookups and bypass tree-based structures like `std::map`, TradeForge uses a Dense Array Order Book. 
+
+### The Ruler Analogy
+The order book's array can be thought of as a physical ruler. Every index in the array represents a discrete tick mark on that ruler. Instead of searching a tree structure to locate a specific price, the Engine maps a price directly to a pre-allocated index on the ruler. 
+
+Financial exchanges define a minimum allowable price movement called a **Tick Size** (e.g., $0.01 for most US equities). Because prices are stored as fixed-point integers (e.g., $150.25 is stored as `15025`), converting a price to an array index requires a basic division:
+`Index = Price / Tick Size`
+
+If an exchange uses sub-penny pricing with a tick size of $0.005 (stored as `5` with a multiplier of 1000), a price of $150.250 is stored as `150250`. The normalized index becomes `150250 / 5 = 30050`.
+
+### Managing Price Ranges
+Because market prices fluctuate throughout the trading day, the array must accommodate a wide spectrum of values. Standard HFT memory models to handle range expansion without introducing the latency of dynamic array resizing include:
+
+1.  **The Massive Static Array (Pragmatic Model):** Memory is abundant on modern servers, and the `PriceLevel` struct requires only 16 bytes (two 8-byte pointers). Allocating an array for 1,000,000 price levels (covering $0.00 to $10,000.00 at a penny tick size) consumes only 16 Megabytes. This fits inside a modern CPU's L3 cache. Active trading prices (the "Top of Book") naturally cluster in a tight range, keeping the active memory locked in the L1 cache. The remainder of the array simply remains cold and unaccessed.
+2.  **The Circular Array (Embedded Model):** For memory-constrained hardware (e.g., FPGA environments), the engine can allocate a smaller power-of-two array size and utilize a bitwise mask (e.g., `Index = (Price / Tick Size) & 8191`). As the price trends upward, it wraps around the array, overwriting stale data from previous price levels.
+
+### Separation of Concerns
+The `LimitOrderBook` class remains agnostic to the current market price or exchange tick rules. Its sole responsibility is pointer manipulation. The client code (the Engine Thread) acts as the intelligent routing agent: it pops a `Tick` from the network queue, calculates the normalized array index, and invokes the order book using that index.
