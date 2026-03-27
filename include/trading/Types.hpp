@@ -34,7 +34,7 @@ namespace tradeforge::trading {
         Quantity quantity;  // 4 bytes (total: 20 bytes, aligned to 4)
         Side side;          // 1 byte  (total: 21 bytes, aligned to 1)
         // The compiler will add 3 bytes of padding to align the struct
-        // to its members' stricstest alignment requirement of 8 bytes.
+        // to its members' strictest alignment requirement of 8 bytes.
         // 24 bytes in total.
     };
 
